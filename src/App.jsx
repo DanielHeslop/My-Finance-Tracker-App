@@ -2712,6 +2712,8 @@ const[allTime,setAllTime]=useState(false);
 const[view,setView]=useState("dashboard");
 const[tab,setTab]=useState(()=>loadLS('ft_tab',"income"));
 const[showPastOneOffs,setShowPastOneOffs]=useState(false);
+const[showIncomeSection,setShowIncomeSection]=useState(false);
+const[showExpenseSection,setShowExpenseSection]=useState(false);
 const[syncedTransactions,setSyncedTransactions]=useState(()=>AKAHU_ENABLED?loadLS('ft_transactions',[]):[]);
 const[lastSynced,setLastSynced]=useState(()=>loadLS('ft_lastSynced',null));
 const[akahuBalances,setAkahuBalances]=useState(()=>AKAHU_ENABLED?loadLS('ft_akahuBalances',[]):[]);
@@ -2728,8 +2730,6 @@ const[txEditingId,setTxEditingId]=useState(null);
 const[showRules,setShowRules]=useState(false);
 const[actualsMode,setActualsMode]=useState(false);
 const importFileRef=useRef(null);
-const[showResync,setShowResync]=useState(false);
-const[resyncDate,setResyncDate]=useState('');
 const chartsRef=useRef(null);
 const chartsAnchor=useRef(null);
 function captureChartsAnchor(){
@@ -2862,14 +2862,14 @@ localStorage.setItem('ft_migration_unlinkmortgage','1');
 setLiabilities(prev=>prev.map(l=>{if(!l.linkMortgage)return l;const{linkMortgage,...rest}=l;return rest;}));
 },[]);
 
-async function handleSync(forceStartDate){
+async function handleSync(){
 if(!AKAHU_ENABLED)return;
 setSyncing(true);
 const syncStart=Date.now();
 try{
 const mostRecent=syncedTransactions.length?syncedTransactions.reduce((latest,t)=>t.date>latest?t.date:latest,'2000-01-01'):null;
-const startDate=forceStartDate?new Date(forceStartDate):(mostRecent?new Date(mostRecent):null);
-if(startDate&&!forceStartDate)startDate.setDate(startDate.getDate()-1);
+const startDate=mostRecent?new Date(mostRecent):null;
+if(startDate)startDate.setDate(startDate.getDate()-1);
 const startParam=startDate?`?start=${dateKey(startDate)}`:'';
 const[txRes,balRes]=await Promise.all([
 fetch(`/.netlify/functions/akahu-transactions${startParam}`),
@@ -3217,8 +3217,20 @@ return(
 const pastOneOffs=entries.filter(e=>e.recur==="One-off"&&e.startDate<todayStr);
 const active=entries.filter(e=>!(e.recur==="One-off"&&e.startDate<todayStr));
 return <>
-{active.filter(e=>e.type==="income").length>0&&<div style={{marginBottom:20}}><div style={{fontSize:11,color:C.green,letterSpacing:".08em",textTransform:"uppercase",fontWeight:700,marginBottom:10}}>Income</div>{active.filter(e=>e.type==="income").map(e=><EntryRow key={`${e.id}-${displayPeriod}`} entry={e} onDelete={handleDelete} onEdit={handleEdit} displayPeriod={displayPeriod} swipeable={true}/>)}</div>}
-{active.filter(e=>e.type==="expense").length>0&&<div style={{marginBottom:20}}><div style={{fontSize:11,color:C.red,letterSpacing:".08em",textTransform:"uppercase",fontWeight:700,marginBottom:10}}>Expenses, Savings &amp; Investments</div>{active.filter(e=>e.type==="expense").map(e=><EntryRow key={`${e.id}-${displayPeriod}`} entry={e} onDelete={handleDelete} onEdit={handleEdit} displayPeriod={displayPeriod} swipeable={true}/>)}</div>}
+{active.filter(e=>e.type==="income").length>0&&<div style={{marginBottom:20}}>
+<div onClick={()=>setShowIncomeSection(v=>!v)} style={{display:"flex",alignItems:"center",gap:6,cursor:"pointer",marginBottom:10}}>
+<div style={{fontSize:11,color:C.green,letterSpacing:".08em",textTransform:"uppercase",fontWeight:700}}>Income</div>
+<span style={{color:C.green,fontSize:10,display:"inline-block",transform:showIncomeSection?"rotate(180deg)":"rotate(0deg)",transition:"transform .2s"}}>▾</span>
+</div>
+{showIncomeSection&&active.filter(e=>e.type==="income").map(e=><EntryRow key={`${e.id}-${displayPeriod}`} entry={e} onDelete={handleDelete} onEdit={handleEdit} displayPeriod={displayPeriod} swipeable={true}/>)}
+</div>}
+{active.filter(e=>e.type==="expense").length>0&&<div style={{marginBottom:20}}>
+<div onClick={()=>setShowExpenseSection(v=>!v)} style={{display:"flex",alignItems:"center",gap:6,cursor:"pointer",marginBottom:10}}>
+<div style={{fontSize:11,color:C.red,letterSpacing:".08em",textTransform:"uppercase",fontWeight:700}}>Expenses, Savings &amp; Investments</div>
+<span style={{color:C.red,fontSize:10,display:"inline-block",transform:showExpenseSection?"rotate(180deg)":"rotate(0deg)",transition:"transform .2s"}}>▾</span>
+</div>
+{showExpenseSection&&active.filter(e=>e.type==="expense").map(e=><EntryRow key={`${e.id}-${displayPeriod}`} entry={e} onDelete={handleDelete} onEdit={handleEdit} displayPeriod={displayPeriod} swipeable={true}/>)}
+</div>}
 {pastOneOffs.length>0&&<div style={{marginTop:8}}><div onClick={()=>setShowPastOneOffs(v=>!v)} style={{display:"flex",alignItems:"center",justifyContent:"space-between",cursor:"pointer",padding:"8px 12px",background:C.card,borderRadius:10,marginBottom:showPastOneOffs?10:0}}><div style={{fontSize:11,color:C.t4,fontWeight:700,textTransform:"uppercase",letterSpacing:".08em"}}>Past one-offs <span style={{background:C.border,color:C.t3,borderRadius:10,padding:"1px 8px",marginLeft:6,fontSize:10}}>{pastOneOffs.length}</span></div><span style={{color:C.t4,fontSize:13,display:"inline-block",transform:showPastOneOffs?"rotate(180deg)":"rotate(0deg)",transition:"transform .2s"}}>▾</span></div>{showPastOneOffs&&pastOneOffs.map(e=><EntryRow key={`${e.id}-${displayPeriod}`} entry={e} onDelete={handleDelete} onEdit={handleEdit} displayPeriod={displayPeriod} swipeable={true}/>)}</div>}
 </>;
 })()}
@@ -3232,19 +3244,12 @@ return <>
 </div>
 </div>
 <div style={{display:"flex",alignItems:"center"}}>
-<button onClick={()=>handleSync()} disabled={syncing} style={{background:syncing?C.border:"rgba(110,231,183,.1)",border:`1px solid ${syncing?C.t5:C.green}`,borderRadius:8,padding:"7px 14px",color:syncing?C.t4:C.green,fontSize:12,fontWeight:700,cursor:syncing?"default":"pointer"}}>
+<button onClick={handleSync} disabled={syncing} style={{background:syncing?C.border:"rgba(110,231,183,.1)",border:`1px solid ${syncing?C.t5:C.green}`,borderRadius:8,padding:"7px 14px",color:syncing?C.t4:C.green,fontSize:12,fontWeight:700,cursor:syncing?"default":"pointer"}}>
 {syncing?"↻ Syncing...":"↻ Sync"}
 </button>
-<button onClick={()=>setShowResync(v=>!v)} className={`rb ${showResync?'oo':''}`} style={{marginLeft:6}}>↻ Resync from date</button>
 </div>
 </div>
 </div>
-{showResync&&(
-<div style={{display:'flex',gap:8,alignItems:'center',marginTop:8}}>
-<input className="fi" type="date" value={resyncDate} onChange={e=>setResyncDate(e.target.value)} style={{padding:'8px 12px',flex:1}}/>
-<button onClick={()=>{if(resyncDate){handleSync(resyncDate);setShowResync(false);}}} className="rb on" disabled={!resyncDate}>Resync</button>
-</div>
-)}
 {syncError&&(
 <div style={{background:"rgba(251,191,36,.08)",border:"1px solid rgba(251,191,36,.3)",borderRadius:8,padding:"8px 12px",marginBottom:12,fontSize:12,color:C.amber}}>
 ⏱ {syncError}
